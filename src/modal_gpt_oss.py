@@ -13,11 +13,16 @@ image = (
     .pip_install("transformers", "torch", "accelerate", "kernels")
 )
 
+@app.function(secrets=[modal.Secret.from_name("huggingface-secret")])                                                                                                                   
+def some_function():                                                                                                                                                                    
+    os.getenv("HF_TOKEN")    # type: ignore
+
 @app.function(
     image=image,
     gpu="A10G",
     timeout=300,
     volumes={HF_CACHE_DIR: model_cache},
+    secrets=[modal.Secret.from_name("huggingface-secret")],
 )
 def generate(prompt: str, max_new_tokens: int = 256) -> dict:
     """Run gpt-oss-20b on a GPU and return output with timings."""
@@ -34,7 +39,7 @@ def generate(prompt: str, max_new_tokens: int = 256) -> dict:
     pipe = pipeline(
         "text-generation",
         model="openai/gpt-oss-20b",
-        torch_dtype="auto",
+        dtype="auto",
         device_map="auto",
     )
     timings.append(("Model load", time.time() - t0))
