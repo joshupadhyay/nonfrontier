@@ -1,5 +1,10 @@
 import time
+from dotenv import load_dotenv
 from groq import Groq
+import os
+
+# pull GROQ_API_KEY
+load_dotenv()
 
 timings = []
 
