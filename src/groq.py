@@ -4,7 +4,7 @@ from groq import Groq
 timings = []
 
 t0 = time.time()
-client = Groq()
+client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 timings.append(("Client init", time.time() - t0))
 
 t0 = time.time()
