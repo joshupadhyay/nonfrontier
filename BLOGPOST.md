@@ -46,9 +46,9 @@ If you're already bored with running a model locally, you probably want to look 
 HuggingFace has a `transformers` Python library for machine learning research and inference. The HF format standardizes models, so you only need to learn one API scheme across the model providers (DeepSeek, Mistral, Meta's Llama, Kimi, etc...). Python is a little slower for inference, but HF's library is really for research and training, not serving models at scale.
 
 ### Pipelines, Generators
+
 I'm using HF's tutorial to understand Pipelines. You first define your 'pipeline' and inference method, model, with an additional argument for device (CPU or GPU). A `pipeline()` object defines the transformation your input will take. Then, you pass this to a `generator()` to run inference.
 ![HF Pipelines](assets/modal.png)
-
 
 ## GPU-obsession
 
@@ -60,7 +60,7 @@ The performance bottleneck is evident when you see both models, side by side on 
 
 Prompt: "please give me an aside, written Shakespearean style about a man who just tried to buy a woman a drink and got rejected."
 
-```
+```md
 ================================================
 Step                                  Time     %
 ------------------------------------------------
@@ -73,6 +73,7 @@ Generator load (HF smol)           404.39s   88% # 3 billion params
 TOTAL                              458.68s
 ================================================
 ```
+
 ![GPU benchmark](assets/memory_pressure.png)
 In CPU mode, the model's weights are loaded into RAM. Running this simple prompt took >9GB of my 16GB alone for the model weights, which adds up quickly.
 

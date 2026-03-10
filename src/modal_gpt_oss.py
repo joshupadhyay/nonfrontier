@@ -1,33 +1,47 @@
 import time
 import modal
 
-app = modal.App("gpt-oss-20b")
+# GPT OSS 20B
+MODEL_NAME = "openai/gpt-oss-20b"
 
-# Volume persists model weights across runs — no re-download
-model_cache = modal.Volume.from_name("hf-model-cache", create_if_missing=True)
-HF_CACHE_DIR = "/root/.cache/huggingface"
-
-# Image only has pip packages — model weights live on the volume
+# Define the container image with vLLM and dependencies
 image = (
     modal.Image.debian_slim(python_version="3.12")
-    .pip_install("transformers", "torch", "accelerate", "kernels")
+    .pip_install(
+        "vllm>=0.8",
+        "transformers<5",  # vLLM 0.8 is incompatible with transformers 5 (TokenizersBackend missing all_special_tokens_extended)
+        "huggingface_hub[hf_transfer]",
+        "flashinfer-python",
+    )
+    .env({
+        "HF_HUB_ENABLE_HF_TRANSFER": "1",
+        "HF_HOME": "/models",  # align HF cache with Modal volume so weights persist across cold starts
+    })
 )
 
-@app.function(secrets=[modal.Secret.from_name("huggingface-secret")])                                                                                                                   
-def some_function():                                                                                                                                                                    
-    os.getenv("HF_TOKEN")    # type: ignore
+app = modal.App(MODEL_NAME)
+
+# Persistent volumes to cache model weights and vLLM compile artifacts across cold starts
+volume = modal.Volume.from_name("model-cache", create_if_missing=True)
+
+# persist vLLM cache to save torch.compile output, and CUDA graph captures
+# claude estimates this will save ~50s (24 sec torch.compile, 19 sec CUDA graph captures)
+compile_cache = modal.Volume.from_name("vllm-compile-cache", create_if_missing=True)
+
 
 @app.function(
     image=image,
     gpu="A10G",
     timeout=300,
-    volumes={HF_CACHE_DIR: model_cache},
+    volumes={"/models": volume, "/root/.cache/vllm": compile_cache},
     secrets=[modal.Secret.from_name("huggingface-secret")],
 )
 def generate(prompt: str, max_new_tokens: int = 256) -> dict:
-    """Run gpt-oss-20b on a GPU and return output with timings."""
+    """Run gpt-oss-20b on a GPU via vLLM and return output with timings."""
     import torch
-    from transformers import pipeline
+    ## we import vllm here. These are imports for Modal's container, so it's nested under this function
+    ## vLLM uses CUDA / other deps that my Macbook does not have, but runs in Modal just fine. 
+    from vllm import LLM, SamplingParams
 
     timings = []
     logs = []
@@ -36,30 +50,25 @@ def generate(prompt: str, max_new_tokens: int = 256) -> dict:
     logs.append(f"VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
 
     t0 = time.time()
-    pipe = pipeline(
-        "text-generation",
-        model="openai/gpt-oss-20b",
-        dtype="auto",
-        device_map="auto",
-    )
+    llm = LLM(model=MODEL_NAME, download_dir="/models")
     timings.append(("Model load", time.time() - t0))
-    logs.append(f"Model dtype: {pipe.model.dtype}")
+
     vram_used = torch.cuda.memory_allocated() / 1e9
     logs.append(f"VRAM used after load: {vram_used:.1f} GB")
 
-    messages = [{"role": "user", "content": prompt}]
-
     t0 = time.time()
-    outputs = pipe(messages, max_new_tokens=max_new_tokens)
-    timings.append((f"Inference ({max_new_tokens} max tokens)", time.time() - t0))
+    params = SamplingParams(max_tokens=max_new_tokens, min_tokens=max_new_tokens)
+    outputs = llm.generate([prompt], params)
+    timings.append((f"Inference ({max_new_tokens} fixed tokens)", time.time() - t0))
 
     vram_peak = torch.cuda.max_memory_allocated() / 1e9
     logs.append(f"VRAM peak: {vram_peak:.1f} GB")
 
-    # Persist any newly downloaded weights to the volume
-    model_cache.commit()
+    volume.commit()
 
-    result = outputs[0]["generated_text"][-1]["content"]
+    result = outputs[0].outputs[0].text
+    token_count = len(outputs[0].outputs[0].token_ids)
+    logs.append(f"Output tokens: {token_count}")
 
     return {"result": result, "timings": timings, "logs": logs}
 
