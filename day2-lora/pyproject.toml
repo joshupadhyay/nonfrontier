@@ -1,0 +1,10 @@
+[project]
+name = "day2-lora"
+version = "0.1.0"
+description = "LoRA fine-tuning pipeline for AWS/CDK Q&A on Modal"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "modal",
+    "anthropic",
+]

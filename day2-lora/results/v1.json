@@ -1,0 +1,21 @@
+{
+  "run_name": "v1",
+  "model": "Qwen/Qwen3-4B",
+  "gpu": "A100-SXM4-40GB",
+  "lora_r": 16,
+  "lora_alpha": 32,
+  "epochs": 3,
+  "batch_size": 4,
+  "grad_accum": 4,
+  "lr": 2e-4,
+  "training_examples": 145,
+  "trainable_params": 33030144,
+  "trainable_pct": 0.8145,
+  "loss_start": 3.194,
+  "loss_end": 1.342,
+  "mean_token_accuracy_start": 0.5257,
+  "mean_token_accuracy_end": 0.6752,
+  "runtime_s": 85.1,
+  "samples_per_sec": 5.112,
+  "final_loss": 1.9025
+}
